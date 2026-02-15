@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import joblib
-import numpy as np
 
 from sklearn.metrics import (
     accuracy_score,
@@ -13,36 +12,41 @@ from sklearn.metrics import (
     confusion_matrix,
 )
 
-import seaborn as sns
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 # ----------------------------
-# Page Config
+# Page setup
 # ----------------------------
-st.set_page_config(page_title="ML Classification App", layout="wide")
-
-st.title("Machine Learning Classification & Evaluation")
-st.write("Upload test dataset → Select model → View performance")
+st.set_page_config(page_title="ML Classifier", layout="wide")
+st.title("Machine Learning Classification App")
 
 
 # ----------------------------
-# Load Models
+# Load bundle
 # ----------------------------
 @st.cache_resource
-def load_models():
-    models = {
-        "Logistic Regression": joblib.load("models/logistic_regression.pkl"),
-        "Decision Tree": joblib.load("models/decision_tree.pkl"),
-        "KNN": joblib.load("models/knn.pkl"),
-        "Naive Bayes": joblib.load("models/naive_bayes.pkl"),
-        "Random Forest": joblib.load("models/random_forest.pkl"),
-        "XGBoost": joblib.load("models/xgboost.pkl"),
-    }
-    return models
+def load_bundle():
+    return joblib.load("models.pkl")
 
 
-models = load_models()
+bundle = load_bundle()
+
+models = {
+    "Logistic Regression": bundle["logistic_regression"],
+    "Decision Tree": bundle["decision_tree"],
+    "KNN": bundle["knn"],
+    "Naive Bayes": bundle["naive_bayes"],
+    "Random Forest": bundle["random_forest"],
+    "XGBoost": bundle["xgboost"],
+}
+
+scaler = bundle["scaler"]
+imputer = bundle["imputer"]
+encoders = bundle["encoders"]
+target_encoder = bundle["target_encoder"]
+feature_columns = bundle["feature_columns"]
 
 
 # ----------------------------
@@ -53,24 +57,40 @@ st.sidebar.header("Controls")
 model_name = st.sidebar.selectbox("Select Model", list(models.keys()))
 model = models[model_name]
 
-
 uploaded_file = st.sidebar.file_uploader("Upload Test CSV", type=["csv"])
 
 
 # ----------------------------
-# Main Logic
+# Prediction block
 # ----------------------------
 if uploaded_file is not None:
+
     data = pd.read_csv(uploaded_file)
 
     st.subheader("Uploaded Data")
     st.write(data.head())
 
-    # assuming last column is target
-    X = data.iloc[:, :-1]
-    y = data.iloc[:, -1]
+    # last column is target
+    X = data.iloc[:, :-1].copy()
+    y = data.iloc[:, -1].copy()
 
-    # Prediction
+    # reorder columns
+    X = X[feature_columns]
+
+    # encode categorical
+    for col in encoders:
+        X[col] = encoders[col].transform(X[col].astype(str))
+
+    # impute
+    X = imputer.transform(X)
+
+    # scale
+    X = scaler.transform(X)
+
+    # encode target
+    y = target_encoder.transform(y)
+
+    # prediction
     y_pred = model.predict(X)
 
     # ----------------------------
@@ -87,22 +107,19 @@ if uploaded_file is not None:
             y_prob = model.predict_proba(X)
             auc = roc_auc_score(y, y_prob, multi_class="ovr")
         else:
-            auc = "Not Available"
+            auc = "N/A"
     except:
-        auc = "Not Available"
+        auc = "N/A"
 
     st.subheader("Evaluation Metrics")
 
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Accuracy", f"{acc:.4f}")
-    col1.metric("Precision", f"{prec:.4f}")
-
-    col2.metric("Recall", f"{rec:.4f}")
-    col2.metric("F1 Score", f"{f1:.4f}")
-
-    col3.metric("MCC", f"{mcc:.4f}")
-    col3.metric("AUC", auc if isinstance(auc, str) else f"{auc:.4f}")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Accuracy", f"{acc:.4f}")
+    c1.metric("Precision", f"{prec:.4f}")
+    c2.metric("Recall", f"{rec:.4f}")
+    c2.metric("F1 Score", f"{f1:.4f}")
+    c3.metric("MCC", f"{mcc:.4f}")
+    c3.metric("AUC", auc if isinstance(auc, str) else f"{auc:.4f}")
 
     # ----------------------------
     # Confusion Matrix
@@ -118,13 +135,12 @@ if uploaded_file is not None:
 
     st.pyplot(fig)
 
-
 else:
-    st.info("Please upload a CSV file to begin.")
+    st.info("Upload a CSV file from sidebar.")
 
 
 # ----------------------------
 # Footer
 # ----------------------------
 st.write("---")
-st.write("Developed for ML Assignment Deployment")
+st.write("Developed for ML Assignment")

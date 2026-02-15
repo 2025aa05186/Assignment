@@ -16,6 +16,12 @@ from xgboost import XGBClassifier
 # ----------------------------
 # Load dataset
 # ----------------------------
+import kagglehub
+
+# Download latest version
+path = kagglehub.dataset_download("rajyellow46/wine-quality")
+
+print("Path to dataset files:", path)
 df = pd.read_csv("train.csv")   # change if needed
 
 # last column = target
